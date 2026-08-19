@@ -6,7 +6,18 @@
   "main": "./index.mjs",
   "exports": {
     ".": "./index.mjs",
+    "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "cordis.patch.yml",
+    "package.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
   },
   "license": "MIT"
 }
