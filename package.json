@@ -1,0 +1,12 @@
+{
+  "name": "dsh-web-search-anysearch",
+  "version": "1.0.0",
+  "description": "AnySearch Web Search Provider Plugin for DeepSeek Harness",
+  "type": "module",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./package.json": "./package.json"
+  },
+  "license": "MIT"
+}
