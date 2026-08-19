@@ -27,8 +27,12 @@ export class AutoFailoverSearchProvider {
     if (anysearchKey) {
       try {
         const res = await this._searchAnySearch(request.query, numResults, anysearchKey, signal);
-        if (res && res.sources && res.sources.length > 0) return res;
+        if (res && res.sources && res.sources.length > 0) {
+          console.log(`[dsh-web-search] ✅ Provider: AnySearch (results: ${res.sources.length}) | Query: "${request.query}"`);
+          return res;
+        }
       } catch (err) {
+        console.warn(`[dsh-web-search] ⚠️ AnySearch error, falling back to Tavily: ${err.message || err}`);
         errors.push("AnySearch failed: " + (err.message || String(err)));
       }
     }
@@ -38,8 +42,12 @@ export class AutoFailoverSearchProvider {
     if (tavilyKey) {
       try {
         const res = await this._searchTavily(request.query, numResults, tavilyKey, signal);
-        if (res && res.sources && res.sources.length > 0) return res;
+        if (res && res.sources && res.sources.length > 0) {
+          console.log(`[dsh-web-search] ✅ Provider: Tavily (fallback active, results: ${res.sources.length}) | Query: "${request.query}"`);
+          return res;
+        }
       } catch (err) {
+        console.warn(`[dsh-web-search] ⚠️ Tavily error, falling back to DeepSeek: ${err.message || err}`);
         errors.push("Tavily failed: " + (err.message || String(err)));
       }
     }
@@ -49,7 +57,10 @@ export class AutoFailoverSearchProvider {
     if (deepseekKey) {
       try {
         const res = await this._searchDeepSeek(request.query, numResults, deepseekKey, signal);
-        if (res && res.sources && res.sources.length > 0) return res;
+        if (res) {
+          console.log(`[dsh-web-search] ✅ Provider: DeepSeek Official | Query: "${request.query}"`);
+          return res;
+        }
       } catch (err) {
         errors.push("DeepSeek failed: " + (err.message || String(err)));
       }
