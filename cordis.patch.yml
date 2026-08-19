@@ -1,3 +1,7 @@
 - insert:
     - id: web-search-anysearch
       name: dsh-web-search-anysearch
+
+- id: web
+  config:
+    searchProvider: anysearch
