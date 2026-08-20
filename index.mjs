@@ -5,13 +5,13 @@ export const ANYSEARCH_DEFAULT_BASE_URL = "https://api.anysearch.com/v1";
 export const TAVILY_DEFAULT_BASE_URL = "https://api.tavily.com";
 
 /**
- * Multi-provider Search Driver with Automatic Failover (Auto-Pool)
- * Automatically cascades: AnySearch -> Tavily -> DeepSeek Official
+ * 带有自动容灾级联的多源网页搜索驱动 (Auto Failover Search Provider)
+ * 级联顺序: AnySearch -> Tavily -> DeepSeek Official Web Search
  */
 export class AutoFailoverSearchProvider {
-  constructor(options) {
+  constructor(options = {}) {
     this.id = options.id || "anysearch";
-    this.options = options || {};
+    this.options = options;
   }
 
   available() {
@@ -22,51 +22,55 @@ export class AutoFailoverSearchProvider {
     const numResults = request.maxResults || this.options.maxResults || 5;
     const errors = [];
 
-    // Candidate 1: AnySearch
-    const anysearchKey = this.options.anysearchKey || process.env.ANYSEARCH_API_KEY || "REDACTED-REVOKED-KEY";
+    // 1. AnySearch 搜索源
+    const anysearchKey = this.options.anysearchKey || process.env.ANYSEARCH_API_KEY;
     if (anysearchKey) {
       try {
         const res = await this._searchAnySearch(request.query, numResults, anysearchKey, signal);
         if (res && res.sources && res.sources.length > 0) {
-          console.log(`[dsh-web-search] ✅ Provider: AnySearch (results: ${res.sources.length}) | Query: "${request.query}"`);
+          console.log(`[dsh-web-search] AnySearch 返回结果 (${res.sources.length} 条) | 关键词: "${request.query}"`);
           return res;
         }
       } catch (err) {
-        console.warn(`[dsh-web-search] ⚠️ AnySearch error, falling back to Tavily: ${err.message || err}`);
-        errors.push("AnySearch failed: " + (err.message || String(err)));
+        console.warn(`[dsh-web-search] AnySearch 请求异常，尝试降级到 Tavily: ${err.message || err}`);
+        errors.push("AnySearch: " + (err.message || String(err)));
       }
     }
 
-    // Candidate 2: Tavily
-    const tavilyKey = this.options.tavilyKey || process.env.TAVILY_API_KEY || "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";
+    // 2. Tavily 搜索源 (备用降级)
+    const tavilyKey = this.options.tavilyKey || process.env.TAVILY_API_KEY;
     if (tavilyKey) {
       try {
         const res = await this._searchTavily(request.query, numResults, tavilyKey, signal);
         if (res && res.sources && res.sources.length > 0) {
-          console.log(`[dsh-web-search] ✅ Provider: Tavily (fallback active, results: ${res.sources.length}) | Query: "${request.query}"`);
+          console.log(`[dsh-web-search] Tavily 备用源返回结果 (${res.sources.length} 条) | 关键词: "${request.query}"`);
           return res;
         }
       } catch (err) {
-        console.warn(`[dsh-web-search] ⚠️ Tavily error, falling back to DeepSeek: ${err.message || err}`);
-        errors.push("Tavily failed: " + (err.message || String(err)));
+        console.warn(`[dsh-web-search] Tavily 请求异常，尝试降级到 DeepSeek: ${err.message || err}`);
+        errors.push("Tavily: " + (err.message || String(err)));
       }
     }
 
-    // Candidate 3: DeepSeek Official
+    // 3. DeepSeek 官方搜索源 (最终兜底)
     const deepseekKey = this.options.deepseekKey || process.env.DEEPSEEK_API_KEY;
     if (deepseekKey) {
       try {
         const res = await this._searchDeepSeek(request.query, numResults, deepseekKey, signal);
         if (res) {
-          console.log(`[dsh-web-search] ✅ Provider: DeepSeek Official | Query: "${request.query}"`);
+          console.log(`[dsh-web-search] DeepSeek 官方搜索返回结果 | 关键词: "${request.query}"`);
           return res;
         }
       } catch (err) {
-        errors.push("DeepSeek failed: " + (err.message || String(err)));
+        errors.push("DeepSeek: " + (err.message || String(err)));
       }
     }
 
-    throw new Error("All search providers failed in auto-failover pool:\n" + errors.join("\n"));
+    if (errors.length === 0) {
+      throw new Error("未配置有效的搜索 API Key (请设置 ANYSEARCH_API_KEY 或在插件配置中传入 apiKey)");
+    }
+
+    throw new Error("所有搜索源均未能获取结果:\n" + errors.join("\n"));
   }
 
   async _searchAnySearch(query, maxResults, apiKey, signal) {
@@ -88,7 +92,7 @@ export class AutoFailoverSearchProvider {
 
     if (!response.ok) {
       const errText = await response.text().catch(() => "");
-      throw new Error("HTTP " + response.status + " " + errText);
+      throw new Error(`HTTP ${response.status} ${errText}`);
     }
 
     const payload = await response.json();
@@ -127,7 +131,7 @@ export class AutoFailoverSearchProvider {
 
     if (!response.ok) {
       const errText = await response.text().catch(() => "");
-      throw new Error("HTTP " + response.status + " " + errText);
+      throw new Error(`HTTP ${response.status} ${errText}`);
     }
 
     const payload = await response.json();
@@ -164,7 +168,7 @@ export class AutoFailoverSearchProvider {
 
     if (!response.ok) {
       const errText = await response.text().catch(() => "");
-      throw new Error("HTTP " + response.status + " " + errText);
+      throw new Error(`HTTP ${response.status} ${errText}`);
     }
 
     const payload = await response.json();
@@ -176,13 +180,15 @@ export class AutoFailoverSearchProvider {
   }
 }
 
-export function apply(ctx, config) {
+export function apply(ctx, config = {}) {
   const provider = new AutoFailoverSearchProvider({
     id: "anysearch",
-    anysearchKey: (config && config.apiKey) || (config && config.anysearchKey) || process.env.ANYSEARCH_API_KEY || "REDACTED-REVOKED-KEY",
-    tavilyKey: (config && config.tavilyKey) || process.env.TAVILY_API_KEY || "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",
-    deepseekKey: (config && config.deepseekKey) || process.env.DEEPSEEK_API_KEY,
-    maxResults: (config && config.maxResults) || 5,
+    anysearchKey: config.apiKey || config.anysearchKey || process.env.ANYSEARCH_API_KEY,
+    anysearchBaseURL: config.baseURL || config.anysearchBaseURL || process.env.ANYSEARCH_BASE_URL,
+    tavilyKey: config.tavilyKey || process.env.TAVILY_API_KEY,
+    tavilyBaseURL: config.tavilyBaseURL || process.env.TAVILY_BASE_URL,
+    deepseekKey: config.deepseekKey || process.env.DEEPSEEK_API_KEY,
+    maxResults: config.maxResults || 5,
   });
 
   ctx.web.registerSearchProvider(provider);
