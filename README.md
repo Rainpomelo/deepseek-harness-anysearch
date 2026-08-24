@@ -35,7 +35,7 @@ DeepSeek Harness (DSH) 的多源级联网页搜索插件。
     searchProvider: anysearch
 ```
 
-本插件只注册搜索 provider，不强制指定网页 Fetch provider。这样在未安装 DSH 原生 HTTP Fetch provider 时，搜索仍可用，也不会出现 `configured web provider "http" is not registered`。如果需要 `Fetch` 功能，请额外启用 DSH 的 `@deepseek-ai/dsh-web-fetch-http` bundle。
+本插件将搜索交给 AnySearch，并将网页 Fetch 交给 DSH 原生的 `http` provider。使用本插件时必须同时启用 DSH 的 `@deepseek-ai/dsh-web-fetch-http` bundle，否则会出现 `configured web provider "http" is not registered`。
 
 ---
 
