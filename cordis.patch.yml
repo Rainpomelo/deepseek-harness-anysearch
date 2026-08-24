@@ -5,4 +5,3 @@
 - id: web
   config:
     searchProvider: anysearch
-    fetchProvider: http
