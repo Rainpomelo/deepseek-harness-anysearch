@@ -40,6 +40,9 @@ DeepSeek Harness (DSH) 的多源级联网页搜索插件。
 }
 ```
 
+> 仓库已改名为 **`dsh-anysearch`**（原 `deepseek-harness-anysearch`）。旧地址会自动 301 跳转，已发布的安装 spec 继续可用。
+> 包内名字 `dsh-web-search-anysearch` **刻意未改**——它是既有 profile 已经解析的身份，也是 bundle patch 里 insert 的那个名字。
+
 然后确认 patch 生效：
 ```yaml
 - insert:
