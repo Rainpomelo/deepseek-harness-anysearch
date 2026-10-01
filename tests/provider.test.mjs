@@ -4,6 +4,7 @@ import {
   ANYSEARCH_DEFAULT_BASE_URL,
   AutoFailoverSearchProvider,
   TAVILY_DEFAULT_BASE_URL,
+  apply,
 } from '../index.mjs'
 
 /**
@@ -218,5 +219,22 @@ test('the base URLs can be overridden', async () => {
     })
     await provider.search({ query: 'hello' })
     assert.ok(calls[0].url.startsWith('https://anysearch.internal/v2'))
+  })
+})
+
+test('apply() registers the id the bundle patch selects', async () => {
+  await withoutEnv(async () => {
+    const registered = []
+    const ctx = { web: { registerSearchProvider: (provider) => registered.push(provider) } }
+
+    apply(ctx, { tavilyKey: 'k' })
+    assert.equal(registered.length, 1, 'apply() 应该注册一个 provider')
+    assert.equal(registered[0].id, 'anysearch', 'patch 里 searchProvider 指的就是这个 id')
+    assert.equal(registered[0].available(), true)
+
+    // Config beats the environment, and the plugin stays honest about a missing key.
+    registered.length = 0
+    apply(ctx, {})
+    assert.equal(registered[0].available(), false)
   })
 })
