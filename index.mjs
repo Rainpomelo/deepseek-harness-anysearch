@@ -6,7 +6,15 @@ export const TAVILY_DEFAULT_BASE_URL = "https://api.tavily.com";
 
 /**
  * 带有自动容灾级联的多源网页搜索驱动 (Auto Failover Search Provider)
- * 级联顺序: AnySearch -> Tavily -> DeepSeek Official Web Search
+ * 级联顺序: AnySearch -> Tavily
+ *
+ * 这里**故意不做** DeepSeek 兜底：DeepSeek 的联网检索不是
+ * `chat/completions` 上一个 `search: true` 参数，而是 Anthropic 格式的
+ * `/messages` 端点 + `web_search_20250305` 服务器工具（见 DSH 自带的
+ * `@deepseek-ai/dsh-web-search-deepseek`，它在没有 `web_search_tool_result`
+ * 块时会主动报错，而不是把模型的一段回答当成检索结果）。之前那层兜底永远
+ * 拿不到 sources，却把聊天回复当搜索结果返回——需要 DeepSeek 检索的用户把
+ * `web.searchProvider` 指回 `deepseek-official` 即可。
  */
 export class AutoFailoverSearchProvider {
   constructor(options = {}) {
@@ -14,63 +22,79 @@ export class AutoFailoverSearchProvider {
     this.options = options;
   }
 
+  /**
+   * 搜索能力是否需要凭据：seam 在选中 provider 前会问这一句（见
+   * `@deepseek-ai/dsh-web` 的 `resolveProvider`）。有凭据的 provider 必须
+   * 如实回答——配了 `searchProvider: anysearch` 却没有 Key 时谎报可用，只会
+   * 让每次搜索都变成一个专属报错，而不是 seam 的
+   * `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`。
+   */
   available() {
-    return true;
+    return Boolean(this.options.anysearchKey || this.options.tavilyKey);
   }
 
   async search(request, signal) {
     const numResults = request.maxResults || this.options.maxResults || 5;
-    const errors = [];
-
-    // 1. AnySearch 搜索源
     const anysearchKey = this.options.anysearchKey || process.env.ANYSEARCH_API_KEY;
-    if (anysearchKey) {
-      try {
-        const res = await this._searchAnySearch(request.query, numResults, anysearchKey, signal);
-        if (res && res.sources && res.sources.length > 0) {
-          console.log(`[dsh-web-search] AnySearch 返回结果 (${res.sources.length} 条) | 关键词: "${request.query}"`);
-          return res;
-        }
-      } catch (err) {
-        console.warn(`[dsh-web-search] AnySearch 请求异常，尝试降级到 Tavily: ${err.message || err}`);
-        errors.push("AnySearch: " + (err.message || String(err)));
-      }
-    }
-
-    // 2. Tavily 搜索源 (备用降级)
     const tavilyKey = this.options.tavilyKey || process.env.TAVILY_API_KEY;
+
+    if (!anysearchKey && !tavilyKey) {
+      throw new Error("未配置任何搜索 API Key：请设置 ANYSEARCH_API_KEY，或在插件配置里提供 apiKey");
+    }
+
+    // 记录每个搜索源到底发生了什么。"没配 Key"、"请求失败"、"请求成功但零结果"
+    // 是三种不同的事，之前它们都会被归结成一句"未配置有效的搜索 API Key"。
+    const notes = [];
+
+    if (anysearchKey) {
+      const hit = await this._attempt(
+        () => this._searchAnySearch(request.query, numResults, anysearchKey, signal),
+        "AnySearch",
+        notes,
+        request.query,
+      );
+      if (hit) return hit;
+    } else {
+      notes.push("AnySearch: 未配置 API Key");
+    }
+
     if (tavilyKey) {
-      try {
-        const res = await this._searchTavily(request.query, numResults, tavilyKey, signal);
-        if (res && res.sources && res.sources.length > 0) {
-          console.log(`[dsh-web-search] Tavily 备用源返回结果 (${res.sources.length} 条) | 关键词: "${request.query}"`);
-          return res;
-        }
-      } catch (err) {
-        console.warn(`[dsh-web-search] Tavily 请求异常，尝试降级到 DeepSeek: ${err.message || err}`);
-        errors.push("Tavily: " + (err.message || String(err)));
+      const hit = await this._attempt(
+        () => this._searchTavily(request.query, numResults, tavilyKey, signal),
+        "Tavily",
+        notes,
+        request.query,
+      );
+      if (hit) return hit;
+    } else {
+      notes.push("Tavily: 未配置 API Key");
+    }
+
+    throw new Error("所有已配置的搜索源都没有返回结果:\n" + notes.join("\n"));
+  }
+
+  /**
+   * 跑一个搜索源：成功且有结果就返回它，否则记录原因后返回 undefined，
+   * 由调用方决定是否降级到下一个源。
+   * @param run - 发起请求的惰性函数。
+   * @param label - 日志与错误里的来源名。
+   * @param notes - 追加本次结果的数组。
+   * @param query - 用于日志的关键词。
+   * @returns 有结果时返回该结果，否则 undefined。
+   */
+  async _attempt(run, label, notes, query) {
+    try {
+      const res = await run();
+      if (res && res.sources && res.sources.length > 0) {
+        console.log(`[dsh-web-search] ${label} 返回结果 (${res.sources.length} 条) | 关键词: "${query}"`);
+        return res;
       }
+      notes.push(`${label}: 请求成功但没有结果`);
+    } catch (err) {
+      notes.push(`${label}: ${err.message || String(err)}`);
+      console.warn(`[dsh-web-search] ${label} 请求异常，降级到下一个源: ${err.message || err}`);
     }
-
-    // 3. DeepSeek 官方搜索源 (最终兜底)
-    const deepseekKey = this.options.deepseekKey || process.env.DEEPSEEK_API_KEY;
-    if (deepseekKey) {
-      try {
-        const res = await this._searchDeepSeek(request.query, numResults, deepseekKey, signal);
-        if (res) {
-          console.log(`[dsh-web-search] DeepSeek 官方搜索返回结果 | 关键词: "${request.query}"`);
-          return res;
-        }
-      } catch (err) {
-        errors.push("DeepSeek: " + (err.message || String(err)));
-      }
-    }
-
-    if (errors.length === 0) {
-      throw new Error("未配置有效的搜索 API Key (请设置 ANYSEARCH_API_KEY 或在插件配置中传入 apiKey)");
-    }
-
-    throw new Error("所有搜索源均未能获取结果:\n" + errors.join("\n"));
+    return undefined;
   }
 
   async _searchAnySearch(query, maxResults, apiKey, signal) {
@@ -149,35 +173,6 @@ export class AutoFailoverSearchProvider {
       truncated: false,
     };
   }
-
-  async _searchDeepSeek(query, maxResults, apiKey, signal) {
-    const url = "https://api.deepseek.com/chat/completions";
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "authorization": "Bearer " + apiKey,
-      },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages: [{ role: "user", content: query }],
-        search: true,
-      }),
-      ...(signal !== undefined ? { signal } : {}),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      throw new Error(`HTTP ${response.status} ${errText}`);
-    }
-
-    const payload = await response.json();
-    return {
-      sources: [],
-      content: payload.choices?.[0]?.message?.content || "",
-      truncated: false,
-    };
-  }
 }
 
 export function apply(ctx, config = {}) {
@@ -187,7 +182,6 @@ export function apply(ctx, config = {}) {
     anysearchBaseURL: config.baseURL || config.anysearchBaseURL || process.env.ANYSEARCH_BASE_URL,
     tavilyKey: config.tavilyKey || process.env.TAVILY_API_KEY,
     tavilyBaseURL: config.tavilyBaseURL || process.env.TAVILY_BASE_URL,
-    deepseekKey: config.deepseekKey || process.env.DEEPSEEK_API_KEY,
     maxResults: config.maxResults || 5,
   });
 

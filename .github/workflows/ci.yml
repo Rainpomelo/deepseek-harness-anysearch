@@ -1,0 +1,39 @@
+name: CI
+
+# The package is a single hand-written `.mjs` file plus a bundle patch, so the
+# only thing that can rot is the contract: the patch naming a row or a provider
+# that no longer exists, or the cascade quietly changing behaviour. Both are
+# covered by `node --test`.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Unit tests
+        run: node --test tests/*.test.mjs
+
+      - name: Verify the package still carries its bundle patch
+        run: |
+          npm pack --dry-run --no-audit --no-fund 2>&1 | tee /tmp/pack.txt
+          grep -q 'cordis.patch.yml' /tmp/pack.txt || {
+            echo '::error::cordis.patch.yml is not in the npm pack output.'
+            echo 'A package-manager install would land without its profile layer.'
+            exit 1
+          }

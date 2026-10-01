@@ -1,7 +1,7 @@
 {
   "name": "dsh-web-search-anysearch",
-  "version": "1.0.0",
-  "description": "AnySearch Web Search Provider Plugin for DeepSeek Harness",
+  "version": "1.1.0",
+  "description": "AnySearch / Tavily failover web search provider plugin for DeepSeek Harness",
   "type": "module",
   "main": "./index.mjs",
   "scripts": {
@@ -17,6 +17,21 @@
     "cordis.patch.yml",
     "package.json"
   ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "web-search",
+    "anysearch",
+    "tavily"
+  ],
+  "homepage": "https://github.com/Rainpomelo/deepseek-harness-anysearch#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rainpomelo/deepseek-harness-anysearch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Rainpomelo/deepseek-harness-anysearch/issues"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
