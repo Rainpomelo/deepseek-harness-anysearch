@@ -34,14 +34,13 @@ DeepSeek Harness (DSH) 的多源级联网页搜索插件。
 ```jsonc
 {
   "dependencies": {
-    "dsh-web-search-anysearch": "github:Rainpomelo/deepseek-harness-anysearch"
+    "dsh-web-search-anysearch": "github:Rainpomelo/dsh-anysearch"
   },
   "dsh": { "profile": { "bundles": ["dsh-web-search-anysearch"] } }
 }
 ```
 
 然后确认 patch 生效：
-
 ```yaml
 - insert:
     - id: web-search-anysearch

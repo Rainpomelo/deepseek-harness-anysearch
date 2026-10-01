@@ -24,13 +24,13 @@
     "anysearch",
     "tavily"
   ],
-  "homepage": "https://github.com/Rainpomelo/deepseek-harness-anysearch#readme",
+  "homepage": "https://github.com/Rainpomelo/dsh-anysearch#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Rainpomelo/deepseek-harness-anysearch.git"
+    "url": "git+https://github.com/Rainpomelo/dsh-anysearch.git"
   },
   "bugs": {
-    "url": "https://github.com/Rainpomelo/deepseek-harness-anysearch/issues"
+    "url": "https://github.com/Rainpomelo/dsh-anysearch/issues"
   },
   "dsh": {
     "bundle": {
